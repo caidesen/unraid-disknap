@@ -1,0 +1,38 @@
+Menu="Main:90"
+Title="DiskNap · 近24小时"
+Tag="moon-o"
+---
+<?php
+require_once '/usr/local/emhttp/plugins/disknap/analysis.php';
+$dnEscape = static function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); };
+try {
+    if (!empty($var['timeZone'])) date_default_timezone_set($var['timeZone']);
+    $dnConfig = dn_read('/boot/config/plugins/disknap/config.json', []);
+    $dnPath = dn_database_path($dnConfig);
+    dn_storage_ready($dnPath, file_get_contents('/proc/self/mounts'));
+    $dnDb = dn_db_open($dnPath);
+    $dnData = dn_db_load($dnDb) ?? dn_empty();
+    $dnOverviewNow = time();
+    $dnOverview = dn_analysis($dnDb, $dnData['disks'], $dnOverviewNow-86400, $dnOverviewNow, true);
+    $dnDb->close();
+    $dnOverviewKnown = $dnOverviewSleep = $dnOverviewWakes = 0;
+    foreach ($dnOverview['series'] as $dnOverviewRow) {
+        $dnOverviewKnown += $dnOverviewRow['awake']+$dnOverviewRow['sleep'];
+        $dnOverviewSleep += $dnOverviewRow['sleep'];
+        $dnOverviewWakes += $dnOverviewRow['wakes'];
+    }
+} catch (Throwable $e) {
+    echo '<p role="alert">'.$dnEscape($e->getMessage()).'</p>';
+    return;
+}
+?>
+<style>
+.disknap-overview {display:flex;flex-wrap:wrap;align-items:center;gap:24px 48px;padding:12px 0}
+.disknap-overview .metric {display:grid;gap:4px}
+.disknap-overview strong {font-size:1.65em;font-weight:500;font-variant-numeric:tabular-nums}
+</style>
+<div class="disknap-overview">
+<div class="metric"><span>休眠率</span><strong><?php echo $dnOverviewKnown ? round(100*$dnOverviewSleep/$dnOverviewKnown,1).'%' : '暂无数据'; ?></strong></div>
+<div class="metric"><span>唤醒次数</span><strong><?php echo $dnOverviewKnown ? $dnOverviewWakes.' 次' : '暂无数据'; ?></strong></div>
+<a href="/DiskNapDetails">查看详情</a>
+</div>

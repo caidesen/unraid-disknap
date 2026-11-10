@@ -1,0 +1,40 @@
+name: 测试与构建
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: sqlite3
+          coverage: none
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: PHP 测试与语法检查
+        run: |
+          php tests/stats.php
+          php tests/database.php
+          php tests/analysis.php
+          php tests/alerts.php
+          php tests/collect.php
+          find source -name '*.php' -exec php -l {} \;
+          for page in source/*.page; do php -l "$page"; done
+      - name: 安装包校验与 JavaScript 检查
+        run: |
+          python3 -m unittest discover -s tests -p 'test_*.py'
+          node --check source/analysis.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: disknap-plugin
+          path: dist/disknap.plg

@@ -1,0 +1,35 @@
+Menu="Utilities"
+Title="DiskNap"
+Icon="moon-o"
+---
+<?php
+require_once '/usr/local/emhttp/plugins/disknap/lib.php';
+$dnSettingsEscape = static function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); };
+try {
+    $dnSettingsConfig = dn_read('/boot/config/plugins/disknap/config.json', []);
+    $dnSettingsInterval = dn_interval($dnSettingsConfig);
+    $dnAlertOptions = dn_alert_config($dnSettingsConfig);
+    $dnSettingsPath = dn_database_path($dnSettingsConfig);
+} catch (Throwable $e) {
+    echo '<p role="alert">'.$dnSettingsEscape($e->getMessage()).'</p>';
+    return;
+}
+?>
+<form method="post" action="/plugins/disknap/settings.php">
+<input type="hidden" name="csrf_token" value="<?php echo $dnSettingsEscape($var['csrf_token'] ?? ''); ?>">
+<dl>
+<dt><label for="disknap-interval">统计间隔（分钟，1–60）</label></dt>
+<dd><input id="disknap-interval" name="interval_minutes" type="number" min="1" max="60" step="1" required value="<?php echo $dnSettingsInterval; ?>"></dd>
+<dt><label for="disknap-database">数据文件位置</label></dt>
+<dd><input id="disknap-database" name="database_path" type="text" required style="width:min(100%,640px)" value="<?php echo $dnSettingsEscape($dnSettingsPath); ?>"></dd>
+<dt>短休眠唤醒通知</dt>
+<dd><input type="hidden" name="alerts_form" value="1"><label><input type="checkbox" name="alerts_enabled" value="1" <?php echo $dnAlertOptions['alerts_enabled']?'checked':''; ?>>启用 Unraid 系统通知</label></dd>
+<dt><label for="disknap-threshold">休眠不超过多久唤醒时通知（分钟）</label></dt>
+<dd><input id="disknap-threshold" name="short_sleep_minutes" type="number" min="1" max="1440" required value="<?php echo $dnAlertOptions['short_sleep_minutes']; ?>"></dd>
+<dt><label for="disknap-cooldown">同一硬盘通知间隔（分钟）</label></dt>
+<dd><input id="disknap-cooldown" name="alert_cooldown_minutes" type="number" min="1" max="1440" required value="<?php echo $dnAlertOptions['alert_cooldown_minutes']; ?>"></dd>
+</dl>
+
+<p>更改位置会自动迁移数据。请选择 SSD 存储池，目标文件须不存在。</p>
+<p><button type="submit">保存</button> <a href="/DiskNapDetails">查看硬盘休眠统计</a></p>
+</form>

@@ -1,0 +1,109 @@
+Menu="DiskNapDetails:1"
+Title="硬盘统计"
+Tag="moon-o"
+---
+<?php
+require_once '/usr/local/emhttp/plugins/disknap/analysis.php';
+$dnEscape = static function ($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); };
+$dnDuration = static function ($s) { return sprintf('%d 小时 %02d 分', intdiv($s,3600), intdiv($s % 3600,60)); };
+try {
+    if (!empty($var['timeZone'])) date_default_timezone_set($var['timeZone']);
+    $dnConfig = dn_read('/boot/config/plugins/disknap/config.json', []);
+    $dnInterval = dn_interval($dnConfig);
+    $dnPath = dn_database_path($dnConfig);
+    dn_storage_ready($dnPath, file_get_contents('/proc/self/mounts'));
+    $dnDb = dn_db_open($dnPath);
+    $dnData = dn_db_load($dnDb) ?? dn_empty();
+    $dnRange = $_GET['days'] ?? '1';
+    if (!is_string($dnRange) && !is_int($dnRange)) throw new RuntimeException('请选择有效的时间范围');
+    $dnRange = (string)$dnRange;
+    if (!in_array($dnRange, ['1','7','30','90','365','custom'], true)) throw new RuntimeException('请选择有效的时间范围');
+    $dnNow = time(); $dnEnd = $dnNow;
+    $dnFrom = date('Y-m-d', $dnNow-30*86400); $dnTo = date('Y-m-d', $dnNow);
+    if ($dnRange === 'custom') {
+        foreach (['from','to'] as $field) {
+            $value = $_GET[$field] ?? '';
+            if (!is_string($value)) throw new RuntimeException('请选择有效的日期');
+            $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+            if (!$date || $date->format('Y-m-d') !== $value) throw new RuntimeException('请选择有效的日期');
+            if ($field === 'from') { $dnFrom=$value; $dnStart=$date->getTimestamp(); }
+            else { $dnTo=$value; $dnEnd=min($dnNow,$date->modify('+1 day')->getTimestamp()); }
+        }
+        if ($dnTo < $dnFrom || $dnTo > date('Y-m-d',$dnNow) || $dnStart >= $dnEnd) throw new RuntimeException('请检查起止日期，结束日期不能晚于今天');
+    } else $dnStart = $dnNow-(int)$dnRange*86400;
+    $dnDisk = $_GET['disk'] ?? '';
+    if (!is_string($dnDisk) || ($dnDisk !== '' && !isset($dnData['disks'][$dnDisk]))) throw new RuntimeException('未知硬盘');
+    $dnSelected = $dnDisk === '' ? $dnData['disks'] : [$dnDisk=>$dnData['disks'][$dnDisk]];
+    $dnAnalysis = dn_analysis($dnDb, $dnSelected, $dnStart, $dnEnd);
+    foreach ($dnAnalysis['series'] as &$dnSeries) $dnSeries['color_index']=array_search($dnSeries['id'],array_map('strval',array_keys($dnData['disks'])),true);
+    unset($dnSeries);
+    $dnHistory = dn_db_recent($dnDb);
+    if ($dnDisk !== '') $dnHistory = array_values(array_filter($dnHistory, static function ($r) use ($dnDisk) { return $r['disk_id'] === $dnDisk; }));
+    $dnKnown = $dnSleep = $dnWakes = 0;
+    foreach ($dnAnalysis['series'] as $dnMetric) {
+        $dnKnown += $dnMetric['awake']+$dnMetric['sleep']; $dnSleep += $dnMetric['sleep'];
+        $dnWakes += $dnMetric['wakes'];
+    }
+    $dnDb->close();
+    $dnStale = time() - $dnData['sample_at'] > $dnInterval * 60 + 90;
+} catch (Throwable $e) {
+    echo '<p role="alert">'.$dnEscape($e->getMessage()).'</p>';
+    return;
+}
+?>
+<link rel="stylesheet" href="/plugins/disknap/analysis.css?v=20261110a">
+<section class="disknap dn-analysis" id="disknap-analysis">
+<header><h2>DiskNap / 硬盘休眠统计</h2></header>
+<form method="get" action="/DiskNapDetails" class="dn-filter">
+<label>时间范围 <select name="days"><?php foreach ([1=>'最近 24 小时',7=>'最近 7 天',30=>'最近 30 天',90=>'最近 90 天',365=>'最近 1 年','custom'=>'自定义日期'] as $dnDay=>$dnLabel): ?><option value="<?php echo $dnDay; ?>" <?php echo $dnRange===(string)$dnDay?'selected':''; ?>><?php echo $dnLabel; ?></option><?php endforeach; ?></select></label>
+<span id="dn-custom-dates" <?php echo $dnRange==='custom'?'':'hidden'; ?>>
+<label>开始日期 <input type="date" name="from" value="<?php echo $dnEscape($dnFrom); ?>" max="<?php echo date('Y-m-d',$dnNow); ?>"></label>
+<label>结束日期 <input type="date" name="to" value="<?php echo $dnEscape($dnTo); ?>" max="<?php echo date('Y-m-d',$dnNow); ?>"></label>
+</span>
+<label>硬盘 <select name="disk"><option value="">全部硬盘</option><?php foreach($dnData['disks'] as $dnId=>$dnRow): ?><option value="<?php echo $dnEscape($dnId); ?>" <?php echo $dnDisk===(string)$dnId?'selected':''; ?>><?php echo $dnEscape($dnRow['slot'].' · '.$dnId); ?></option><?php endforeach; ?></select></label>
+<button type="submit">查看</button><a href="/Main">返回主界面</a><a href="/Settings/DiskNapSettings">设置</a>
+</form>
+<p class="muted" role="status"><?php echo $dnEscape(date('Y-m-d H:i',$dnAnalysis['start']).' 至 '.date('Y-m-d H:i',$dnAnalysis['end'])); ?> · 更新时间：<?php echo $dnData['sample_at'] ? $dnEscape(date('Y-m-d H:i:s',$dnData['sample_at'])) : '暂无数据'; ?><?php echo $dnStale?'（暂未更新）':''; ?></p>
+<div class="dn-metrics">
+<div><span>休眠率</span><strong><?php echo $dnKnown ? round(100*$dnSleep/$dnKnown,1).'%' : '暂无数据'; ?></strong></div>
+<div><span>唤醒次数</span><strong><?php echo $dnKnown ? $dnWakes.' 次' : '暂无数据'; ?></strong></div>
+
+</div>
+<?php if (!$dnKnown): ?><p role="status">这个时间范围内暂无数据。</p><?php endif; ?>
+<?php if ($dnAnalysis['clock_gaps']): ?><p role="status">部分时间没有记录。</p><?php endif; ?>
+
+
+
+<section class="dn-chart"><h3>休眠率趋势</h3><div id="dn-sleep-rate"></div></section>
+<section class="dn-chart"><h3>唤醒次数趋势</h3><div id="dn-wakes"></div></section>
+<section class="dn-chart"><h3>休眠时长分布</h3><div id="dn-distribution"></div></section>
+<h3>硬盘对比</h3>
+<div class="scroll"><table><thead><tr><th scope="col">硬盘</th><th scope="col">休眠率</th><th scope="col">唤醒次数</th></tr></thead><tbody>
+<?php foreach($dnAnalysis['series'] as $dnMetric): ?><tr><th scope="row"><?php echo $dnEscape($dnMetric['label']); ?></th><td><?php echo $dnMetric['ratio']===null?'—':round($dnMetric['ratio']*100,1).'%'; ?></td><td><?php echo $dnMetric['awake']+$dnMetric['sleep']>0?$dnMetric['wakes']:'—'; ?></td></tr><?php endforeach; ?>
+</tbody></table></div>
+
+
+<details><summary>最近记录</summary>
+
+<div class="scroll"><table>
+
+<thead><tr><th scope="col">时间</th><th scope="col">硬盘</th><th scope="col">状态</th><th scope="col">本次运行</th><th scope="col">本次休眠</th><th scope="col">唤醒 / 休眠次数</th></tr></thead>
+<tbody>
+<?php foreach ($dnHistory as $dnRecord): ?>
+<tr><td><?php echo $dnEscape(date('Y-m-d H:i:s', $dnRecord['sampled_at'])); ?></td>
+<th scope="row"><?php echo $dnEscape($dnRecord['slot']); ?><br><span class="identity"><?php echo $dnEscape($dnRecord['disk_id']); ?></span></th>
+<td><?php echo ['awake'=>'运行','sleep'=>'休眠','unknown'=>'未知 / 离线'][$dnRecord['state']] ?? '未知'; ?></td>
+<td><?php echo $dnRecord['interval_start'] !== null ? $dnDuration($dnRecord['awake_seconds']) : '—'; ?></td>
+<td><?php echo $dnRecord['interval_start'] !== null ? $dnDuration($dnRecord['sleep_seconds']) : '—'; ?></td>
+<td><?php echo $dnEscape($dnRecord['wakeups'].' / '.$dnRecord['spindowns']); ?></td></tr>
+<?php endforeach; ?>
+<?php if (!$dnHistory): ?><tr><td colspan="6">暂无记录。</td></tr><?php endif; ?>
+</tbody></table></div>
+
+</details>
+
+
+<script type="application/json" id="dn-analysis-data"><?php echo json_encode($dnAnalysis, JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR); ?></script>
+<script src="/plugins/disknap/vendor/echarts.min.js?v=6.0.0"></script>
+<script src="/plugins/disknap/analysis.js?v=20261110a"></script>
+</section>
