@@ -16,13 +16,21 @@ Unraid 硬盘休眠统计插件，用来查看硬盘休眠率、唤醒次数，�
 
 ## 安装
 
-先按 [构建说明](docs/开发说明.md#构建安装包) 生成 `disknap.plg`，复制到 Unraid 的 `/boot/config/plugins/disknap.plg`，然后在 Unraid 终端执行：
+在 Unraid 中打开 **插件 → 安装插件**，粘贴下面的链接并安装：
+
+```text
+https://github.com/caidesen/unraid-disknap/releases/download/2026.11.10f/disknap.plg
+```
+
+也可到 [发布页面](https://github.com/caidesen/unraid-disknap/releases) 下载 `disknap.plg`，复制到 Unraid 的 `/boot/config/plugins/`，在终端执行：
 
 ```sh
 plugin install /boot/config/plugins/disknap.plg
 ```
 
-目前采用手动安装，尚未上架 Community Applications，也不支持在线自动更新。
+要求 Unraid 7.2 或以上。默认数据位置使用 `cache` 存储池；如果你的 SSD 池名称不同，安装后先到插件设置中修改数据位置。
+
+当前为公开测试版，尚未上架 Community Applications。更新时手动安装新版本，配置和历史数据会保留。
 
 ## 使用
 
