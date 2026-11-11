@@ -41,7 +41,7 @@ try {
 } finally { unlink($dir.'/stats.json'); rmdir($dir); }
 $s = dn_sample(dn_empty(), ['"disk1"'=>disk('1')], 100, 100, 'x', 5);
 check($s['disks']['HDD-A']['slot'] === 'disk1', '真实 INI 盘位名称去除引号');
-check(dn_database_path([]) === '/mnt/cache/appdata/disknap/stats.sqlite', '默认数据库路径');
+
 check(dn_database_path(['database_path'=>'/mnt/fast/appdata/disknap/history.sqlite']) === '/mnt/fast/appdata/disknap/history.sqlite', '其他池路径');
 foreach (['/boot/stats.sqlite','/mnt/user/appdata/stats.sqlite','/mnt/user0/x.sqlite','/mnt/disk1/x.sqlite','/mnt/cache/../x.sqlite','/mnt/cache//x.sqlite',"/mnt/cache/a\n.sqlite",'/mnt/cache/a.txt','/mnt/cache/a\\b.sqlite',[]] as $invalid) {
     $rejected = false;

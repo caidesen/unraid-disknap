@@ -29,6 +29,7 @@ jobs:
       - name: PHP 测试与语法检查
         run: |
           php tests/stats.php
+          php tests/storage.php
           php tests/database.php
           php tests/analysis.php
           php tests/alerts.php

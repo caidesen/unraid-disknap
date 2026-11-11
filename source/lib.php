@@ -13,8 +13,49 @@ function dn_write(string $path, array $data): void {
         if (file_put_contents($tmp, $json) !== strlen($json) || !chmod($tmp, 0644) || !rename($tmp, $path)) throw new RuntimeException('无法保存：'.$path);
     } finally { if (file_exists($tmp)) unlink($tmp); }
 }
+function dn_auto_database_path(array $pools,array $disks,array $appdata,string $mounts): string {
+    usort($pools,static function($a,$b){return strlen($b)-strlen($a);});
+    $eligible=[];
+    foreach($pools as $pool){
+        if(!preg_match('/^[A-Za-z0-9_.-]+$/D',$pool) || in_array($pool,['.','..','user','user0'],true)
+            || preg_match('/^disk[0-9]+$/D',$pool))continue;
+        if(preg_match('~^\\S+ /mnt/'.preg_quote($pool,'~').' (?!tmpfs |rootfs )\\S+ ~m',$mounts)!==1)continue;
+        $members=[];
+        foreach($disks as $slot=>$disk){
+            if(!is_array($disk) || ($disk['type']??'')!=='Cache')continue;
+            $name=$disk['name']??trim((string)$slot,'"');
+            foreach($pools as $candidate){
+                if(preg_match('/^'.preg_quote($candidate,'/').'[0-9]*$/D',$name)){
+                    if($candidate===$pool)$members[]=$disk;
+                    break;
+                }
+            }
+        }
+        if(!$members)continue;
+        $ssd=true;
+        foreach($members as $disk){
+            if((string)($disk['rotational']??'')!=='0' || empty($disk['device']) || ($disk['status']??'')!=='DISK_OK')$ssd=false;
+        }
+        if($ssd)$eligible[]=$pool;
+    }
+    $preferred=$appdata['shareCachePool']??'';
+    if(in_array($preferred,$eligible,true))$pool=$preferred;
+    elseif(count($eligible)===1)$pool=$eligible[0];
+    else throw new RuntimeException('无法自动确定 SSD 存储池，请在 DiskNap 设置中填写数据文件位置');
+    return '/mnt/'.$pool.'/appdata/disknap/stats.sqlite';
+}
 function dn_database_path(array $config): string {
-    $path = $config['database_path'] ?? '/mnt/cache/appdata/disknap/stats.sqlite';
+    $path = $config['database_path'] ?? null;
+    if($path===null){
+        $legacy='/mnt/cache/appdata/disknap/stats.sqlite';
+        if(is_file($legacy))$path=$legacy;
+        else {
+            $pools=array_map(static function($file){return basename($file,'.cfg');},glob('/boot/config/pools/*.cfg')?:[]);
+            $disks=is_file('/var/local/emhttp/disks.ini')?parse_ini_file('/var/local/emhttp/disks.ini',true,INI_SCANNER_RAW):[];
+            $appdata=is_file('/boot/config/shares/appdata.cfg')?parse_ini_file('/boot/config/shares/appdata.cfg',false,INI_SCANNER_RAW):[];
+            $path=dn_auto_database_path($pools,$disks?:[],$appdata?:[],file_get_contents('/proc/self/mounts'));
+        }
+    }
     if (!is_string($path) || preg_match('~^/mnt/([A-Za-z0-9_.-]+)/.+\\.sqlite$~D', $path, $match) !== 1
         || in_array($match[1], ['user','user0'], true) || preg_match('~^disk[0-9]+$~D', $match[1])
         || preg_match('/[\\x00-\\x1f\\x7f\\\\]/', $path)) throw new RuntimeException('数据库须使用 /mnt/池名/目录/文件.sqlite 的直接路径，请选择 SSD 池');

@@ -9,12 +9,15 @@ try {
     $dnSettingsConfig = dn_read('/boot/config/plugins/disknap/config.json', []);
     $dnSettingsInterval = dn_interval($dnSettingsConfig);
     $dnAlertOptions = dn_alert_config($dnSettingsConfig);
-    $dnSettingsPath = dn_database_path($dnSettingsConfig);
+    $dnSettingsPathError='';
+    try { $dnSettingsPath=dn_database_path($dnSettingsConfig); }
+    catch(RuntimeException $e){$dnSettingsPath='';$dnSettingsPathError=$e->getMessage();}
 } catch (Throwable $e) {
     echo '<p role="alert">'.$dnSettingsEscape($e->getMessage()).'</p>';
     return;
 }
 ?>
+<?php if($dnSettingsPathError): ?><p role="alert"><?php echo $dnSettingsEscape($dnSettingsPathError); ?></p><?php endif; ?>
 <form method="post" action="/plugins/disknap/settings.php">
 <input type="hidden" name="csrf_token" value="<?php echo $dnSettingsEscape($var['csrf_token'] ?? ''); ?>">
 <dl>

@@ -29,6 +29,10 @@ try {
     $config = dn_read($configDir.'/config.json', []);
     $path = dn_database_path($config);
     dn_storage_ready($path, file_get_contents('/proc/self/mounts'));
+    if(!isset($config['database_path'])){
+        $config['database_path']=$path;
+        dn_write($configDir.'/config.json',$config);
+    }
     $dir = dirname($path);
     if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) throw new RuntimeException('无法创建数据库目录');
     $db = dn_db_open($path, true);

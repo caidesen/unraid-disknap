@@ -1,6 +1,6 @@
 # SQLite 数据结构
 
-数据库默认位置：`/mnt/cache/appdata/disknap/stats.sqlite`（可在设置中修改），schema 版本通过 `PRAGMA user_version` 管理，目前为 3。
+数据库位置：首次安装自动选择 SSD 池，保存至 `/mnt/池名/appdata/disknap/stats.sqlite`（可在设置中修改），schema 版本通过 `PRAGMA user_version` 管理，目前为 3。
 
 ## 表
 

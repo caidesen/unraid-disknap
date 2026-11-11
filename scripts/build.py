@@ -47,8 +47,8 @@ rm -f /boot/config/plugins/disknap/disknap.cron
 rm -rf /usr/local/emhttp/plugins/disknap
 echo "DiskNap removed; history retained at configured database path; config retained in /boot/config/plugins/disknap"
 '''
-    plugin = ET.Element('PLUGIN', name='disknap', author='DiskNap', version='2026.11.10f', min='7.2.0')
-    ET.SubElement(plugin, 'CHANGES').text = '修复通知失败重试，清理旧统计字段与多余查询。'
+    plugin = ET.Element('PLUGIN', name='disknap', author='DiskNap', version='2026.11.11', min='7.2.0')
+    ET.SubElement(plugin, 'CHANGES').text = '首次安装自动选择 SSD 存储池，保留手动路径与既有历史。'
     for script, method in [(install, None), (remove, 'remove')]:
         attrs = {'Run':'/bin/bash'}
         if method:

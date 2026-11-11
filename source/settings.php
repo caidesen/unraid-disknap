@@ -11,7 +11,8 @@ try {
     if (!$lock || !flock($lock, LOCK_EX)) throw new RuntimeException('无法获得数据库迁移锁');
     $configPath = '/boot/config/plugins/disknap/config.json';
     $old = dn_read($configPath, []);
-    $oldPath = dn_database_path($old);
+    try { $oldPath=dn_database_path($old); }
+    catch(RuntimeException $e){$oldPath=null;}
     $config = ['interval_minutes'=>filter_var($_POST['interval_minutes'] ?? null, FILTER_VALIDATE_INT),
         'database_path'=>$_POST['database_path'] ?? $oldPath];
     $config += array_key_exists('alerts_form',$_POST) ? dn_alert_config([
@@ -21,15 +22,16 @@ try {
     $newPath = dn_database_path($config);
     dn_storage_ready($newPath, file_get_contents('/proc/self/mounts'));
     dn_interval($config);
-    if ($oldPath !== $newPath) {
+    $moving=$oldPath!==null && $oldPath!==$newPath && is_file($oldPath);
+    if ($moving) {
         dn_storage_ready($oldPath, file_get_contents('/proc/self/mounts'));
         dn_db_copy($oldPath, $newPath);
     }
     try { dn_write($configPath, $config); }
     catch (Throwable $e) {
-        if ($oldPath !== $newPath) unlink($newPath);
+        if ($moving) unlink($newPath);
         throw $e;
     }
-    if ($oldPath !== $newPath && !unlink($oldPath)) error_log('DiskNap: 新数据库已启用，旧数据库未能删除：'.$oldPath);
+    if ($moving && !unlink($oldPath)) error_log('DiskNap: 新数据库已启用，旧数据库未能删除：'.$oldPath);
     header('Location: /Settings/DiskNapSettings', true, 303);
 } catch (Throwable $e) { http_response_code(400); echo htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'); }
